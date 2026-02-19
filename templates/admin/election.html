@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ election.name }} - Kandidaten{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <a href="{{ url_for('admin_dashboard') }}" class="text-sm text-blue-600 hover:underline">&larr; Zurück</a>
+            <h1 class="text-2xl font-bold text-gray-800 mt-1">{{ election.name }}</h1>
+            <p class="text-sm text-gray-500">
+                {% if election.school_name %}{{ election.school_name }} &middot; {% endif %}
+                {{ election.year }} &middot; Max. {{ election.max_votes }} Stimmen
+            </p>
+        </div>
+        <div class="flex gap-2">
+            <form method="POST" action="{{ url_for('admin_election_toggle', election_id=election.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit"
+                    class="px-4 py-2 text-sm font-semibold rounded-lg transition
+                    {% if election.is_active %}bg-red-100 text-red-700 hover:bg-red-200{% else %}bg-green-100 text-green-700 hover:bg-green-200{% endif %}">
+                    {% if election.is_active %}Deaktivieren{% else %}Aktivieren{% endif %}
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_election_delete', election_id=election.id) }}"
+                onsubmit="return confirm('Wahl wirklich löschen? Alle Kandidaten, Codes und Stimmen werden gelöscht!')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="px-4 py-2 text-sm font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition">
+                    Löschen
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Kandidat hinzufügen -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Kandidat hinzufügen</h2>
+        <form method="POST" action="{{ url_for('admin_candidate_add', election_id=election.id) }}" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1">Name *</label>
+                    <input type="text" name="name" required
+                        class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1">Klasse</label>
+                    <input type="text" name="class_name" placeholder="z.B. 10a"
+                        class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                </div>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm text-gray-500 mb-1">Beschreibung</label>
+                <textarea name="description" rows="2" placeholder="Kurze Vorstellung..."
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none resize-none"></textarea>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm text-gray-500 mb-1">Foto</label>
+                <input type="file" name="photo" accept="image/*"
+                    class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+            <button type="submit"
+                class="bg-blue-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-blue-700 transition">
+                Hinzufügen
+            </button>
+        </form>
+    </div>
+
+    <!-- Kandidaten-Liste -->
+    <h2 class="text-lg font-semibold text-gray-700 mb-4">Kandidaten ({{ candidates|length }})</h2>
+    {% if candidates %}
+    <div class="space-y-3">
+        {% for candidate in candidates %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-4">
+            {% if candidate.photo_filename %}
+            <img src="{{ url_for('static', filename='uploads/' + candidate.photo_filename) }}"
+                alt="{{ candidate.name }}" class="w-14 h-14 rounded-full object-cover">
+            {% else %}
+            <div class="w-14 h-14 rounded-full bg-gray-200 flex items-center justify-center text-xl text-gray-400">
+                {{ candidate.name[0] }}
+            </div>
+            {% endif %}
+            <div class="flex-1">
+                <div class="font-semibold text-gray-800">{{ candidate.name }}</div>
+                {% if candidate.class_name %}<div class="text-sm text-gray-500">Klasse {{ candidate.class_name }}</div>{% endif %}
+                {% if candidate.description %}<div class="text-sm text-gray-600">{{ candidate.description }}</div>{% endif %}
+            </div>
+            <form method="POST" action="{{ url_for('admin_candidate_delete', candidate_id=candidate.id) }}"
+                onsubmit="return confirm('Kandidat löschen?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="text-red-400 hover:text-red-600 transition text-sm">Löschen</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-center text-gray-400 py-8">Noch keine Kandidaten vorhanden.</p>
+    {% endif %}
+</div>
+{% endblock %}

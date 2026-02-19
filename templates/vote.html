@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Abstimmen - {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+    <div class="text-center mb-8">
+        <h1 class="text-2xl font-bold text-gray-800">{{ election.name }}</h1>
+        <p class="text-gray-500 mt-1">Wähle bis zu <strong>{{ election.max_votes }}</strong> Kandidaten</p>
+    </div>
+
+    <form id="voteForm" action="{{ url_for('submit_vote', code=code) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="grid gap-4">
+            {% for candidate in candidates %}
+            <label class="candidate-card cursor-pointer block bg-white rounded-xl shadow-sm border-2 border-gray-100 p-4 transition hover:shadow-md" data-id="{{ candidate.id }}">
+                <div class="flex items-center gap-4">
+                    <input
+                        type="checkbox"
+                        name="candidates"
+                        value="{{ candidate.id }}"
+                        class="candidate-checkbox hidden"
+                    >
+                    <div class="flex-shrink-0">
+                        {% if candidate.photo_filename %}
+                        <img
+                            src="{{ url_for('static', filename='uploads/' + candidate.photo_filename) }}"
+                            alt="{{ candidate.name }}"
+                            class="w-16 h-16 rounded-full object-cover"
+                        >
+                        {% else %}
+                        <div class="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl text-gray-400">
+                            {{ candidate.name[0] }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-gray-800 text-lg">{{ candidate.name }}</div>
+                        {% if candidate.class_name %}
+                        <div class="text-sm text-gray-500">Klasse {{ candidate.class_name }}</div>
+                        {% endif %}
+                        {% if candidate.description %}
+                        <div class="text-sm text-gray-600 mt-1">{{ candidate.description }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="flex-shrink-0 check-indicator w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center transition">
+                    </div>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+
+        <div id="selectionInfo" class="text-center text-gray-500 mt-6 text-sm">
+            <span id="selectedCount">0</span> von {{ election.max_votes }} gewählt
+        </div>
+
+        <button
+            type="button"
+            id="submitBtn"
+            disabled
+            class="w-full mt-4 bg-blue-600 text-white font-semibold py-4 px-6 rounded-xl hover:bg-blue-700 active:bg-blue-800 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+            Stimme abgeben
+        </button>
+    </form>
+
+    <!-- Bestätigungs-Dialog -->
+    <div id="confirmModal" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full">
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Stimme abgeben?</h2>
+            <p class="text-gray-600 mb-2">Du hast gewählt:</p>
+            <ul id="confirmList" class="list-disc list-inside mb-4 text-gray-800 font-medium"></ul>
+            <p class="text-sm text-red-600 mb-4">Achtung: Deine Stimme kann nicht mehr geändert werden!</p>
+            <div class="flex gap-3">
+                <button
+                    id="confirmCancel"
+                    class="flex-1 py-3 px-4 rounded-xl border-2 border-gray-200 font-semibold text-gray-600 hover:bg-gray-50 transition"
+                >
+                    Abbrechen
+                </button>
+                <button
+                    id="confirmSubmit"
+                    class="flex-1 py-3 px-4 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
+                >
+                    Bestätigen
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const maxVotes = {{ election.max_votes }};
+    const cards = document.querySelectorAll('.candidate-card');
+    const checkboxes = document.querySelectorAll('.candidate-checkbox');
+    const submitBtn = document.getElementById('submitBtn');
+    const selectedCountEl = document.getElementById('selectedCount');
+    const modal = document.getElementById('confirmModal');
+    const confirmList = document.getElementById('confirmList');
+    const form = document.getElementById('voteForm');
+
+    function updateUI() {
+        const checked = document.querySelectorAll('.candidate-checkbox:checked');
+        const count = checked.length;
+        selectedCountEl.textContent = count;
+        submitBtn.disabled = count === 0;
+
+        cards.forEach(card => {
+            const cb = card.querySelector('.candidate-checkbox');
+            const indicator = card.querySelector('.check-indicator');
+            if (cb.checked) {
+                card.classList.add('border-blue-500', 'bg-blue-50');
+                card.classList.remove('border-gray-100');
+                indicator.classList.add('bg-blue-500', 'border-blue-500', 'text-white');
+                indicator.classList.remove('border-gray-300');
+                indicator.innerHTML = '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+            } else {
+                card.classList.remove('border-blue-500', 'bg-blue-50');
+                card.classList.add('border-gray-100');
+                indicator.classList.remove('bg-blue-500', 'border-blue-500', 'text-white');
+                indicator.classList.add('border-gray-300');
+                indicator.innerHTML = '';
+            }
+        });
+
+        // Disable unchecked cards if max reached
+        cards.forEach(card => {
+            const cb = card.querySelector('.candidate-checkbox');
+            if (count >= maxVotes && !cb.checked) {
+                card.classList.add('opacity-50');
+            } else {
+                card.classList.remove('opacity-50');
+            }
+        });
+    }
+
+    cards.forEach(card => {
+        card.addEventListener('click', function(e) {
+            e.preventDefault();
+            const cb = card.querySelector('.candidate-checkbox');
+            const checked = document.querySelectorAll('.candidate-checkbox:checked');
+
+            if (cb.checked) {
+                cb.checked = false;
+            } else if (checked.length < maxVotes) {
+                cb.checked = true;
+            }
+            updateUI();
+        });
+    });
+
+    submitBtn.addEventListener('click', function() {
+        const checked = document.querySelectorAll('.candidate-checkbox:checked');
+        confirmList.innerHTML = '';
+        checked.forEach(cb => {
+            const card = cb.closest('.candidate-card');
+            const name = card.querySelector('.font-semibold').textContent;
+            const li = document.createElement('li');
+            li.textContent = name;
+            confirmList.appendChild(li);
+        });
+        modal.classList.remove('hidden');
+    });
+
+    document.getElementById('confirmCancel').addEventListener('click', function() {
+        modal.classList.add('hidden');
+    });
+
+    document.getElementById('confirmSubmit').addEventListener('click', function() {
+        form.submit();
+    });
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.classList.add('hidden');
+    });
+})();
+</script>
+{% endblock %}

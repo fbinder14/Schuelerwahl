@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Schülersprecherwahl{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-screen px-4">
+    <div class="w-full max-w-md">
+        <div class="bg-white rounded-2xl shadow-lg p-8 text-center">
+            <div class="mb-4 flex justify-center">
+                <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="64" height="64" rx="8" fill="#2563eb" fill-opacity="0.1"/>
+                    <rect x="8" y="8" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="18" y="8" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="28" y="8" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="8" y="18" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="28" y="18" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="8" y="28" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="18" y="28" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="28" y="28" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="48" y="8" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="48" y="18" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="38" y="18" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="18" y="38" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="8" y="48" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="18" y="48" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="28" y="48" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="38" y="38" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="48" y="38" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="48" y="48" width="8" height="8" rx="1" fill="#2563eb"/>
+                    <rect x="28" y="38" width="8" height="8" rx="1" fill="#2563eb"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800 mb-1">Schülersprecherwahl</h1>
+            {% if school_name %}
+            <p class="text-sm text-blue-600 font-medium mb-2">{{ school_name }}</p>
+            {% endif %}
+            <p class="text-gray-500 mb-8">Gib deinen Abstimmungscode ein oder scanne den QR-Code.</p>
+
+            <form action="{{ url_for('enter_code') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input
+                    type="text"
+                    name="code"
+                    placeholder="Code eingeben..."
+                    maxlength="8"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    class="w-full text-center text-2xl tracking-widest font-mono px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition"
+                >
+                <button
+                    type="submit"
+                    class="w-full mt-4 bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 active:bg-blue-800 transition"
+                >
+                    Abstimmen
+                </button>
+            </form>
+
+            <p class="text-xs text-gray-400 mt-6">
+                Scanne den QR-Code auf deinem Zettel, um direkt zur Abstimmung zu gelangen.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

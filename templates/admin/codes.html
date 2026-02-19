@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}{{ election.name }} - Codes{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="mb-6">
+        <a href="{{ url_for('admin_dashboard') }}" class="text-sm text-blue-600 hover:underline">&larr; Zurück</a>
+        <h1 class="text-2xl font-bold text-gray-800 mt-1">Codes: {{ election.name }}</h1>
+        <p class="text-sm text-gray-500">{{ codes|length }} Codes gesamt &middot; {{ used }} verwendet &middot; {{ codes|length - used }} verfügbar</p>
+    </div>
+
+    <!-- Klassen verwalten -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Klassen verwalten</h2>
+
+        {% if school_classes %}
+        <div class="overflow-x-auto mb-4">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="text-left px-4 py-2 text-gray-500 font-medium">Klasse</th>
+                        <th class="text-left px-4 py-2 text-gray-500 font-medium">Schülerzahl</th>
+                        <th class="text-left px-4 py-2 text-gray-500 font-medium">Codes generiert</th>
+                        <th class="text-left px-4 py-2 text-gray-500 font-medium">Aktion</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for sc in school_classes %}
+                    <tr>
+                        <td class="px-4 py-2 font-medium">{{ sc.name }}</td>
+                        <td class="px-4 py-2">{{ sc.student_count }}</td>
+                        <td class="px-4 py-2">{{ class_code_counts.get(sc.name, 0) }}</td>
+                        <td class="px-4 py-2">
+                            <form method="POST" action="{{ url_for('admin_class_delete', class_id=sc.id) }}"
+                                onsubmit="return confirm('Klasse löschen?')" class="inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="text-red-400 hover:text-red-600 transition text-sm">Löschen</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="flex flex-wrap gap-3 items-end">
+            <form method="POST" action="{{ url_for('admin_class_add', election_id=election.id) }}" class="flex gap-3 items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1">Klasse</label>
+                    <input type="text" name="name" required placeholder="z.B. 7a"
+                        class="w-28 px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1">Schülerzahl</label>
+                    <input type="number" name="student_count" required min="1" max="50" placeholder="25"
+                        class="w-28 px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                </div>
+                <button type="submit"
+                    class="bg-gray-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-gray-700 transition">
+                    Klasse hinzufügen
+                </button>
+            </form>
+        </div>
+
+        {% if school_classes %}
+        <div class="mt-4">
+            <form method="POST" action="{{ url_for('admin_codes_generate_classes', election_id=election.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit"
+                    class="bg-green-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-green-700 transition">
+                    Codes für alle Klassen generieren
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Reservecodes generieren -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6 flex flex-wrap gap-3 items-end">
+        <form method="POST" action="{{ url_for('admin_codes_generate', election_id=election.id) }}" class="flex gap-3 items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div>
+                <label class="block text-sm text-gray-500 mb-1">Reservecodes (ohne Klasse)</label>
+                <input type="number" name="count" value="10" min="1" max="2000"
+                    class="w-28 px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+            </div>
+            <button type="submit"
+                class="bg-blue-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-blue-700 transition">
+                Generieren
+            </button>
+        </form>
+
+        {% if codes %}
+        <a href="{{ url_for('admin_codes_pdf', election_id=election.id) }}"
+            class="py-2 px-5 font-semibold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition">
+            PDF herunterladen
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Code-Liste -->
+    {% if codes %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="max-h-96 overflow-y-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 sticky top-0">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-gray-500 font-medium">#</th>
+                        <th class="text-left px-4 py-3 text-gray-500 font-medium">Code</th>
+                        <th class="text-left px-4 py-3 text-gray-500 font-medium">Klasse</th>
+                        <th class="text-left px-4 py-3 text-gray-500 font-medium">Status</th>
+                        <th class="text-left px-4 py-3 text-gray-500 font-medium">Verwendet am</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for code in codes %}
+                    <tr class="{% if code.is_used %}bg-gray-50 text-gray-400 line-through{% endif %}">
+                        <td class="px-4 py-2">{{ loop.index }}</td>
+                        <td class="px-4 py-2 font-mono tracking-wider">{{ code.code }}</td>
+                        <td class="px-4 py-2">{{ code.class_name or '-' }}</td>
+                        <td class="px-4 py-2">
+                            {% if code.is_used %}
+                            <span class="inline-block px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full no-underline">Verwendet</span>
+                            {% else %}
+                            <span class="inline-block px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">Verfügbar</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2 text-xs">
+                            {% if code.used_at %}{{ code.used_at.strftime('%d.%m.%Y %H:%M:%S') }}{% else %}-{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <p class="text-center text-gray-400 py-12">Noch keine Codes generiert.</p>
+    {% endif %}
+</div>
+{% endblock %}

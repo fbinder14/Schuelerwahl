@@ -1,0 +1,21 @@
+/* Zusätzliches CSS für Schülersprecherwahl */
+
+/* Smooth transitions for candidate cards */
+.candidate-card {
+    transition: all 0.15s ease;
+}
+
+.candidate-card:active {
+    transform: scale(0.98);
+}
+
+/* Prevent text selection on candidate cards */
+.candidate-card {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Keep status badges readable inside line-through rows */
+.no-underline {
+    text-decoration: none;
+}

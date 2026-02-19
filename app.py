@@ -205,7 +205,7 @@ def submit_vote(code: str):
 
     # Mark code as used
     voting_code.is_used = True
-    voting_code.used_at = datetime.utcnow()
+    voting_code.used_at = datetime.now()
 
     db.session.commit()
 
@@ -318,6 +318,10 @@ def admin_election(election_id: int):
 def admin_election_toggle(election_id: int):
     election = Election.query.get_or_404(election_id)
 
+    if election.is_ended:
+        flash("Diese Wahl wurde bereits beendet und kann nicht mehr aktiviert werden.", "error")
+        return redirect(url_for("admin_election", election_id=election_id))
+
     if not election.is_active:
         # Check if codes exist
         code_count = VotingCode.query.filter_by(election_id=election_id).count()
@@ -327,6 +331,7 @@ def admin_election_toggle(election_id: int):
         # Deactivate all other elections first
         Election.query.update({"is_active": False})
         election.is_active = True
+        election.was_activated = True
     else:
         election.is_active = False
 
@@ -334,6 +339,32 @@ def admin_election_toggle(election_id: int):
     status = "aktiviert" if election.is_active else "deaktiviert"
     flash(f"Wahl {status}.", "success")
     return redirect(url_for("admin_election", election_id=election_id))
+
+
+@app.route("/admin/election/<int:election_id>/end", methods=["POST"])
+@admin_required
+def admin_election_end(election_id: int):
+    election = Election.query.get_or_404(election_id)
+
+    if election.is_ended:
+        flash("Diese Wahl wurde bereits beendet.", "error")
+        return redirect(url_for("admin_results", election_id=election_id))
+
+    # Deactivate and mark as ended
+    election.is_active = False
+    election.is_ended = True
+
+    # Invalidate all unused codes
+    unused_codes = VotingCode.query.filter_by(
+        election_id=election_id, is_used=False
+    ).all()
+    for vc in unused_codes:
+        vc.is_used = True
+        vc.used_at = None  # No timestamp = invalidated, not used for voting
+
+    db.session.commit()
+    flash(f"Wahl beendet. {len(unused_codes)} unbenutzte Codes wurden ungültig gemacht.", "success")
+    return redirect(url_for("admin_results", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/delete", methods=["POST"])
@@ -487,6 +518,11 @@ def admin_codes(election_id: int):
             election_id=election_id, class_name=sc.name
         ).count()
 
+    # Count unused reserve codes (without class)
+    reserve_code_count = VotingCode.query.filter_by(
+        election_id=election_id, class_name=None, is_used=False
+    ).count()
+
     return render_template(
         "admin/codes.html",
         election=election,
@@ -494,6 +530,7 @@ def admin_codes(election_id: int):
         used=used,
         school_classes=school_classes,
         class_code_counts=class_code_counts,
+        reserve_code_count=reserve_code_count,
     )
 
 
@@ -526,11 +563,16 @@ def admin_codes_pdf(election_id: int):
     election = Election.query.get_or_404(election_id)
     settings = get_school_settings()
 
-    # Optional: filter by single class
+    # Optional: filter by single class or reserve codes only
     filter_class = request.args.get("class_name")
+    reserve_only = request.args.get("reserve") == "1"
     if filter_class:
         codes = VotingCode.query.filter_by(
             election_id=election_id, is_used=False, class_name=filter_class
+        ).all()
+    elif reserve_only:
+        codes = VotingCode.query.filter_by(
+            election_id=election_id, is_used=False, class_name=None
         ).all()
     else:
         codes = VotingCode.query.filter_by(election_id=election_id, is_used=False).all()
@@ -616,7 +658,7 @@ def admin_codes_pdf(election_id: int):
             c.setFillColorRGB(0, 0, 0)
             text_x = x + cell_w / 2
 
-            c.setFont("Courier-Bold", 10)
+            c.setFont("Courier", 10)
             c.drawCentredString(text_x, y + 14 * mm, f"Code: {vc.code}")
 
             # Class name (if present)
@@ -626,11 +668,11 @@ def admin_codes_pdf(election_id: int):
             else:
                 c.drawCentredString(text_x, y + 9 * mm, election.name)
 
-            # School name
+            # School name (closer to class name)
             if settings.school_name:
                 c.setFont("Helvetica", 6)
                 c.setFillColorRGB(0.4, 0.4, 0.4)
-                c.drawCentredString(text_x, y + 4 * mm, settings.school_name)
+                c.drawCentredString(text_x, y + 6 * mm, settings.school_name)
 
     c.save()
     buf.seek(0)
@@ -639,7 +681,7 @@ def admin_codes_pdf(election_id: int):
         buf,
         mimetype="application/pdf",
         as_attachment=True,
-        download_name=f"wahlcodes_{election.name}_{election.year}{'_' + filter_class if filter_class else ''}.pdf",
+        download_name=f"wahlcodes_{election.name}_{election.year}{'_' + filter_class if filter_class else '_Reserve' if reserve_only else ''}.pdf",
     )
 
 

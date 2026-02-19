@@ -4,12 +4,15 @@ Eine einfache Web-App zur Durchführung von Schülersprecherwahlen. Schüler sca
 
 ## Was die App kann
 
-- Wahlen anlegen mit Kandidaten (inkl. Foto und Beschreibung)
-- Wahlcodes als PDF mit QR-Codes generieren und ausdrucken
-- Klassensätze verwalten (z.B. 7a: 25 Schüler, 7b: 29 Schüler) und Codes pro Klasse generieren
-- Schulname auf den QR-Kärtchen und der Startseite anzeigen
-- Anonyme Stimmabgabe (kein Rückschluss von Stimme auf Code möglich)
-- Live-Ergebnisse mit Balkendiagramm im Admin-Bereich
+- **Schuleinstellungen**: Schulname und Logo zentral verwalten (wird auf Startseite, Abstimmungsseite und QR-Kärtchen angezeigt)
+- **Wahlen anlegen** mit Kandidaten (inkl. Foto und Beschreibung)
+- **Klassensätze verwalten** (z.B. 7a: 25 Schüler, 7b: 29 Schüler) und Codes pro Klasse generieren
+- **Wahlcodes als PDF** mit QR-Codes generieren und ausdrucken (nach Klassen sortiert, Seitenumbruch pro Klasse)
+- **Reservecodes** ohne Klassenzuordnung generieren (separates PDF)
+- **Anonyme Stimmabgabe** (kein Rückschluss von Stimme auf Code möglich)
+- **Live-Ergebnisse** mit Balkendiagramm im Admin-Bereich
+- **Präsentationsmodus**: Vollbild-Ansicht mit dunklem Design, Live-Balkendiagramm, Fortschrittsbalken und Sound bei neuen Stimmen (ideal für Beamer)
+- **Wahl beenden**: Wahl offiziell abschließen, alle unbenutzten Codes werden ungültig
 
 ## Voraussetzungen
 
@@ -73,12 +76,14 @@ Das wars! Die App läuft jetzt. Beim ersten Start werden alle notwendigen Kompon
 
 1. Gehe auf **http://localhost/admin/login**
 2. Melde dich mit dem Passwort aus der `.env`-Datei an
-3. Erstelle eine neue Wahl (Name, Schulname, Jahr, max. Stimmen)
-4. Füge Kandidaten hinzu (mit Foto und Beschreibung)
-5. Gehe auf **Codes** und füge Klassen hinzu (z.B. "7a" mit 25 Schülern)
-6. Klicke auf **Codes für alle Klassen generieren**
-7. Lade das **PDF herunter** und drucke es aus
-8. Aktiviere die Wahl (grüner "Aktivieren"-Button)
+3. Richte unter **Schuleinstellungen** den Schulnamen und optional ein Logo ein
+4. Erstelle eine neue Wahl (Name, Jahr, max. Stimmen)
+5. Füge Kandidaten hinzu (mit Foto und Beschreibung)
+6. Gehe auf **Codes** und füge Klassen hinzu (z.B. "7a" mit 25 Schülern)
+7. Klicke auf **Codes für alle Klassen generieren**
+8. Lade das **PDF herunter** und drucke es aus
+9. Optional: Generiere zusätzlich Reservecodes ohne Klasse
+10. Aktiviere die Wahl (grüner "Aktivieren"-Button)
 
 ### Wahl durchführen
 
@@ -87,13 +92,25 @@ Das wars! Die App läuft jetzt. Beim ersten Start werden alle notwendigen Kompon
 3. Schüler scannen den QR-Code mit dem Handy oder geben den Code manuell ein
 4. Schüler wählen ihre Kandidaten und bestätigen
 5. Ergebnisse sind live im Admin-Bereich unter **Ergebnisse** sichtbar
+6. Nutze den **Präsentationsmodus** (Button im Dashboard), um Ergebnisse per Beamer zu zeigen
+
+### Wahl beenden
+
+Wenn die Abstimmung abgeschlossen ist:
+
+1. Gehe auf **Bearbeiten** der Wahl
+2. Klicke auf **Wahl beenden**
+3. Bestätige die Warnung (alle unbenutzten Codes werden ungültig)
+4. Die offiziellen Ergebnisse mit Wahlbeteiligung werden angezeigt
 
 ### Tipps
 
 - Die Codes im PDF sind nach Klassen sortiert mit Seitenumbruch pro Klasse, so lassen sie sich einfach verteilen
-- Zusätzlich zu den Klassencodes kannst du Reservecodes ohne Klassenzuordnung generieren
+- Einzelne Klassen-PDFs können direkt in der Klassentabelle heruntergeladen werden
+- Reservecodes (ohne Klasse) haben ein eigenes PDF
 - Jeder Code funktioniert nur einmal
 - Im Admin-Bereich siehst du, welche Codes bereits verwendet wurden
+- Die Buttons "Ergebnisse" und "Präsentation" erscheinen im Dashboard erst, nachdem die Wahl erstmalig aktiviert wurde
 
 ## App stoppen
 

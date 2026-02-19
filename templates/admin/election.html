@@ -13,6 +13,7 @@
             </p>
         </div>
         <div class="flex gap-2">
+            {% if not election.is_ended %}
             <form method="POST" action="{{ url_for('admin_election_toggle', election_id=election.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit"
@@ -21,6 +22,18 @@
                     {% if election.is_active %}Deaktivieren{% else %}Aktivieren{% endif %}
                 </button>
             </form>
+            {% if election.was_activated %}
+            <form method="POST" action="{{ url_for('admin_election_end', election_id=election.id) }}"
+                onsubmit="return confirm('Wahl wirklich beenden?\n\nAlle noch nicht verwendeten Wahlcodes werden ungültig.\nDiese Aktion kann nicht rückgängig gemacht werden!')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="px-4 py-2 text-sm font-semibold text-orange-700 bg-orange-100 rounded-lg hover:bg-orange-200 transition">
+                    Wahl beenden
+                </button>
+            </form>
+            {% endif %}
+            {% else %}
+            <span class="px-4 py-2 text-sm font-semibold text-gray-500 bg-gray-100 rounded-lg">Wahl beendet</span>
+            {% endif %}
             <form method="POST" action="{{ url_for('admin_election_delete', election_id=election.id) }}"
                 onsubmit="return confirm('Wahl wirklich löschen? Alle Kandidaten, Codes und Stimmen werden gelöscht!')">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

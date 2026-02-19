@@ -21,7 +21,9 @@ class Election(db.Model):
     year = db.Column(db.Integer, nullable=False)
     max_votes = db.Column(db.Integer, default=3)
     is_active = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    was_activated = db.Column(db.Boolean, default=False)
+    is_ended = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
 
     candidates = db.relationship("Candidate", backref="election", cascade="all, delete-orphan")
     voting_codes = db.relationship("VotingCode", backref="election", cascade="all, delete-orphan")
@@ -69,4 +71,4 @@ class Vote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     election_id = db.Column(db.Integer, db.ForeignKey("elections.id"), nullable=False)
     candidate_id = db.Column(db.Integer, db.ForeignKey("candidates.id"), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)

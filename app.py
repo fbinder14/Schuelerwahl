@@ -81,6 +81,15 @@ def generate_code(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def class_sort_key(name: str) -> tuple:
+    """Sort class names naturally: 5a < 5b < 6a < 10d."""
+    import re
+    m = re.match(r"(\d+)(.*)", name.strip())
+    if m:
+        return (int(m.group(1)), m.group(2).lower())
+    return (999, name.lower())
+
+
 # ---------------------------------------------------------------------------
 # Schüler-Bereich
 # ---------------------------------------------------------------------------
@@ -260,6 +269,11 @@ def admin_election_toggle(election_id: int):
     election = Election.query.get_or_404(election_id)
 
     if not election.is_active:
+        # Check if codes exist
+        code_count = VotingCode.query.filter_by(election_id=election_id).count()
+        if code_count == 0:
+            flash("Wahl kann nicht aktiviert werden: Es wurden noch keine Codes generiert.", "error")
+            return redirect(url_for("admin_election", election_id=election_id))
         # Deactivate all other elections first
         Election.query.update({"is_active": False})
         election.is_active = True
@@ -413,7 +427,8 @@ def admin_codes(election_id: int):
     election = Election.query.get_or_404(election_id)
     codes = VotingCode.query.filter_by(election_id=election_id).order_by(VotingCode.id).all()
     used = sum(1 for c in codes if c.is_used)
-    school_classes = SchoolClass.query.filter_by(election_id=election_id).order_by(SchoolClass.name).all()
+    school_classes = SchoolClass.query.filter_by(election_id=election_id).all()
+    school_classes.sort(key=lambda sc: class_sort_key(sc.name))
 
     # Count codes per class
     class_code_counts = {}
@@ -459,17 +474,27 @@ def admin_codes_generate(election_id: int):
 @admin_required
 def admin_codes_pdf(election_id: int):
     election = Election.query.get_or_404(election_id)
-    codes = VotingCode.query.filter_by(election_id=election_id, is_used=False).all()
+
+    # Optional: filter by single class
+    filter_class = request.args.get("class_name")
+    if filter_class:
+        codes = VotingCode.query.filter_by(
+            election_id=election_id, is_used=False, class_name=filter_class
+        ).all()
+    else:
+        codes = VotingCode.query.filter_by(election_id=election_id, is_used=False).all()
 
     if not codes:
         flash("Keine ungenutzten Codes vorhanden.", "error")
         return redirect(url_for("admin_codes", election_id=election_id))
 
-    # Group codes by class_name (codes without class at the end)
+    # Group codes by class_name, sorted naturally (codes without class at the end)
     from itertools import groupby
 
     def sort_key(vc):
-        return (0, vc.class_name) if vc.class_name else (1, "")
+        if vc.class_name:
+            return (0, class_sort_key(vc.class_name))
+        return (1, (999, ""))
 
     codes_sorted = sorted(codes, key=sort_key)
     grouped = []
@@ -489,7 +514,11 @@ def admin_codes_pdf(election_id: int):
     margin_y = 15 * mm
     cell_w = (page_w - 2 * margin_x) / cols
     cell_h = (page_h - 2 * margin_y) / rows
-    qr_size = min(cell_w, cell_h) - 20 * mm
+
+    # Reserve space for text below QR code (3 lines + padding)
+    text_area_h = 22 * mm
+    top_pad = 3 * mm
+    qr_size = min(cell_h - text_area_h - top_pad, cell_w - 10 * mm)
 
     from reportlab.lib.utils import ImageReader
 
@@ -526,29 +555,28 @@ def admin_codes_pdf(election_id: int):
 
             qr_img = ImageReader(qr_buf)
             qr_x = x + (cell_w - qr_size) / 2
-            qr_y = y + cell_h - qr_size - 5 * mm
+            qr_y = y + text_area_h
             c.drawImage(qr_img, qr_x, qr_y, width=qr_size, height=qr_size)
 
-            # Code text below QR
-            c.setFont("Helvetica", 10)
+            # Text below QR code (Courier for clear 0/O distinction)
             c.setFillColorRGB(0, 0, 0)
             text_x = x + cell_w / 2
-            text_y = y + 5 * mm
 
-            c.drawCentredString(text_x, text_y + 10 * mm, f"Code: {vc.code}")
+            c.setFont("Courier-Bold", 10)
+            c.drawCentredString(text_x, y + 14 * mm, f"Code: {vc.code}")
 
             # Class name (if present)
             c.setFont("Helvetica", 7)
             if vc.class_name:
-                c.drawCentredString(text_x, text_y + 5 * mm, f"Klasse {vc.class_name}")
+                c.drawCentredString(text_x, y + 9 * mm, f"Klasse {vc.class_name}")
             else:
-                c.drawCentredString(text_x, text_y + 5 * mm, election.name)
+                c.drawCentredString(text_x, y + 9 * mm, election.name)
 
             # School name
             if election.school_name:
                 c.setFont("Helvetica", 6)
                 c.setFillColorRGB(0.4, 0.4, 0.4)
-                c.drawCentredString(text_x, text_y, election.school_name)
+                c.drawCentredString(text_x, y + 4 * mm, election.school_name)
 
     c.save()
     buf.seek(0)
@@ -557,7 +585,7 @@ def admin_codes_pdf(election_id: int):
         buf,
         mimetype="application/pdf",
         as_attachment=True,
-        download_name=f"wahlcodes_{election.name}_{election.year}.pdf",
+        download_name=f"wahlcodes_{election.name}_{election.year}{'_' + filter_class if filter_class else ''}.pdf",
     )
 
 

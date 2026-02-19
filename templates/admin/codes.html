@@ -29,7 +29,13 @@
                     <tr>
                         <td class="px-4 py-2 font-medium">{{ sc.name }}</td>
                         <td class="px-4 py-2">{{ sc.student_count }}</td>
-                        <td class="px-4 py-2">{{ class_code_counts.get(sc.name, 0) }}</td>
+                        <td class="px-4 py-2">
+                            {{ class_code_counts.get(sc.name, 0) }}
+                            {% if class_code_counts.get(sc.name, 0) > 0 %}
+                            <a href="{{ url_for('admin_codes_pdf', election_id=election.id, class_name=sc.name) }}"
+                                class="ml-2 text-blue-600 hover:text-blue-800 text-xs font-medium">PDF</a>
+                            {% endif %}
+                        </td>
                         <td class="px-4 py-2">
                             <form method="POST" action="{{ url_for('admin_class_delete', class_id=sc.id) }}"
                                 onsubmit="return confirm('Klasse löschen?')" class="inline">
@@ -65,7 +71,7 @@
         </div>
 
         {% if school_classes %}
-        <div class="mt-4">
+        <div class="mt-4 flex flex-wrap gap-3 items-center">
             <form method="POST" action="{{ url_for('admin_codes_generate_classes', election_id=election.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit"
@@ -73,6 +79,12 @@
                     Codes für alle Klassen generieren
                 </button>
             </form>
+            {% if codes %}
+            <a href="{{ url_for('admin_codes_pdf', election_id=election.id) }}"
+                class="py-2 px-5 font-semibold text-green-700 bg-green-100 border border-green-300 rounded-lg hover:bg-green-200 transition animate-pulse-green">
+                PDF herunterladen
+            </a>
+            {% endif %}
         </div>
         {% endif %}
     </div>

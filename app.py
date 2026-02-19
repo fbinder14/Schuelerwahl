@@ -808,7 +808,7 @@ def admin_summary_pdf(election_id: int):
         VotingCode.used_at != None,
     ).count()
     total_votes = Vote.query.filter_by(election_id=election_id).count()
-    pct = round(used_codes / total_codes * 100, 1) if total_codes > 0 else 0
+    pct = str(round(used_codes / total_codes * 100, 1)).replace(".", ",") if total_codes > 0 else "0"
 
     # Time period
     fmt = "%d.%m.%Y um %H:%M:%S Uhr"

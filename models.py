@@ -24,6 +24,8 @@ class Election(db.Model):
     was_activated = db.Column(db.Boolean, default=False)
     is_ended = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
+    activated_at = db.Column(db.DateTime)
+    ended_at = db.Column(db.DateTime)
 
     candidates = db.relationship("Candidate", backref="election", cascade="all, delete-orphan")
     voting_codes = db.relationship("VotingCode", backref="election", cascade="all, delete-orphan")

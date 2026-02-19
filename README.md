@@ -1,141 +1,256 @@
 # Schülersprecherwahl
 
-Eine einfache Web-App zur Durchführung von Schülersprecherwahlen. Schüler scannen einen QR-Code oder geben einen Wahlcode ein und stimmen ab. Die Lehrkraft verwaltet alles über einen Admin-Bereich.
+Eine Web-App, mit der Schulen eine Schülersprecherwahl digital durchführen können.
+Die Schüler stimmen per Smartphone ab, die Lehrkraft verwaltet alles über einen geschützten Verwaltungsbereich.
 
-## Was die App kann
+---
 
-- **Schuleinstellungen**: Schulname und Logo zentral verwalten (wird auf Startseite, Abstimmungsseite und QR-Kärtchen angezeigt)
-- **Wahlen anlegen** mit Kandidaten (inkl. Foto und Beschreibung)
-- **Klassensätze verwalten** (z.B. 7a: 25 Schüler, 7b: 29 Schüler) und Codes pro Klasse generieren
-- **Wahlcodes als PDF** mit QR-Codes generieren und ausdrucken (nach Klassen sortiert, Seitenumbruch pro Klasse)
-- **Reservecodes** ohne Klassenzuordnung generieren (separates PDF)
-- **Anonyme Stimmabgabe** (kein Rückschluss von Stimme auf Code möglich)
-- **Live-Ergebnisse** mit Balkendiagramm im Admin-Bereich
-- **Präsentationsmodus**: Vollbild-Ansicht mit dunklem Design, Live-Balkendiagramm, Fortschrittsbalken und Sound bei neuen Stimmen (ideal für Beamer)
-- **Wahl beenden**: Wahl offiziell abschließen, alle unbenutzten Codes werden ungültig
+## So funktioniert es
+
+1. Die Lehrkraft legt eine Wahl an und trägt die Kandidaten ein
+2. Für jede Klasse werden Wahlzettel mit QR-Codes als PDF erzeugt und ausgedruckt
+3. Jeder Schüler bekommt einen Zettel, scannt den QR-Code mit dem Handy und stimmt ab
+4. Die Ergebnisse sind sofort live im Verwaltungsbereich sichtbar
+5. Am Ende wird die Wahl offiziell beendet
+
+Die Abstimmung ist **anonym** -- es ist technisch nicht möglich, eine Stimme einem bestimmten Code zuzuordnen.
+
+---
+
+## Funktionen im Überblick
+
+| Funktion | Beschreibung |
+|---|---|
+| **Kandidaten** | Name, Klasse, Beschreibung und Foto pro Kandidat |
+| **Klassenverwaltung** | Klassen mit Schülerzahl anlegen (z.B. "7a" mit 25 Schülern) |
+| **QR-Code-Kärtchen** | PDF mit QR-Codes und Wahlcodes zum Ausdrucken und Ausschneiden |
+| **Klassensätze** | Codes nach Klassen getrennt generieren; jede Klasse beginnt im PDF auf einer neuen Seite |
+| **Reservecodes** | Zusätzliche Codes ohne Klassenzuordnung (z.B. für Nachzügler) |
+| **Schulbranding** | Schulname und Logo auf der Startseite, der Abstimmungsseite und den QR-Kärtchen |
+| **Live-Ergebnisse** | Balkendiagramm mit automatischer Aktualisierung alle 5 Sekunden |
+| **Präsentationsmodus** | Vollbild-Ansicht mit dunklem Hintergrund, ideal zur Anzeige per Beamer; mit Fortschrittsbalken und akustischem Signal bei neuen Stimmen |
+| **Wahl beenden** | Wahl offiziell abschließen; alle noch nicht verwendeten Codes werden automatisch ungültig |
+| **Sicherheit** | Jeder Code funktioniert nur einmal; Schutz gegen Brute-Force-Angriffe; anonyme Stimmabgabe |
+
+---
 
 ## Voraussetzungen
 
-Du brauchst einen Computer (oder Server) mit **Docker**. Docker ist ein Programm, das die App in einer Art "Container" laufen lässt, ohne dass du etwas installieren musst.
+Die App wird über **Docker** betrieben. Docker sorgt dafür, dass alles automatisch eingerichtet wird -- man muss nichts selbst installieren oder konfigurieren.
 
 ### Docker installieren
 
-1. Gehe auf [docker.com/get-started](https://www.docker.com/get-started/) und lade **Docker Desktop** herunter
-2. Installiere es (einfach den Anweisungen folgen)
-3. Starte Docker Desktop
+1. **Docker Desktop** herunterladen: [docker.com/get-started](https://www.docker.com/get-started/)
+2. Installieren (einfach den Anweisungen auf dem Bildschirm folgen)
+3. Docker Desktop starten
 
-Ob Docker läuft, kannst du testen, indem du ein Terminal öffnest und eingibst:
+Zur Kontrolle ein Terminal (Mac: "Terminal", Windows: "Eingabeaufforderung") öffnen und eintippen:
 
 ```
 docker --version
 ```
 
-Wenn eine Versionsnummer erscheint, ist alles bereit.
+Wenn eine Versionsnummer erscheint (z.B. `Docker version 27.5.1`), ist Docker bereit.
 
-## App starten
+---
 
-### 1. Projektordner öffnen
+## Einrichtung (einmalig)
 
-Öffne ein Terminal und navigiere in den Projektordner:
+### 1. Projektordner herunterladen
 
-```
-cd pfad/zum/schuelerwahl
-```
+Den Projektordner `schuelerwahl` auf den Computer laden (z.B. in den Downloads-Ordner).
 
-### 2. Umgebungsvariablen setzen
+### 2. Einstellungsdatei anlegen
 
-Erstelle im Projektordner eine Datei namens `.env` mit folgendem Inhalt:
+Im Projektordner eine neue Textdatei mit dem Namen `.env` erstellen (der Punkt am Anfang ist wichtig!) und folgendes eintragen:
 
 ```
-SECRET_KEY=ein-langes-zufaelliges-passwort-hier
-ADMIN_PASSWORD=dein-admin-passwort
+SECRET_KEY=ein-langer-zufaelliger-text-z-b-schule2026geheim
+ADMIN_PASSWORD=mein-sicheres-passwort
 BASE_URL=http://localhost
 ```
 
-- **SECRET_KEY**: Ein beliebiger langer Text (z.B. `meine-schule-wahl-2026-geheim`). Wird intern zur Absicherung verwendet.
-- **ADMIN_PASSWORD**: Das Passwort, mit dem du dich im Admin-Bereich anmeldest.
-- **BASE_URL**: Die Adresse, unter der die App erreichbar ist. Auf deinem Rechner: `http://localhost`. Auf einem Server mit eigener Domain: z.B. `https://wahl.meine-schule.de`.
+**Was bedeuten diese Einstellungen?**
+
+| Einstellung | Erklärung |
+|---|---|
+| `SECRET_KEY` | Ein beliebig langer Text, der die App intern absichert. Kann irgendetwas sein, z.B. `meine-schule-wahl-2026-xyz`. |
+| `ADMIN_PASSWORD` | Das Passwort für den Verwaltungsbereich. Dieses Passwort gibt man ein, um Wahlen zu verwalten. |
+| `BASE_URL` | Die Adresse, unter der die App erreichbar ist. Am eigenen Rechner: `http://localhost`. Auf einem Server: z.B. `https://wahl.meine-schule.de`. |
 
 ### 3. App starten
 
-Im Terminal eingeben:
+Terminal öffnen, in den Projektordner wechseln und eingeben:
 
 ```
+cd pfad/zum/schuelerwahl
 docker compose up -d
 ```
 
-Das wars! Die App läuft jetzt. Beim ersten Start werden alle notwendigen Komponenten automatisch heruntergeladen (dauert 1-2 Minuten, danach startet alles sofort).
+Beim allerersten Start lädt Docker die benötigten Komponenten herunter (1-2 Minuten). Danach startet die App sofort.
 
-### 4. App öffnen
+### 4. Im Browser öffnen
 
-Öffne im Browser: **http://localhost**
+Die Seite der Schüler: **http://localhost**
+Der Verwaltungsbereich: **http://localhost/admin/login**
 
-## Benutzung
+---
 
-### Admin-Bereich
+## Anleitung: Wahl vorbereiten
 
-1. Gehe auf **http://localhost/admin/login**
-2. Melde dich mit dem Passwort aus der `.env`-Datei an
-3. Richte unter **Schuleinstellungen** den Schulnamen und optional ein Logo ein
-4. Erstelle eine neue Wahl (Name, Jahr, max. Stimmen)
-5. Füge Kandidaten hinzu (mit Foto und Beschreibung)
-6. Gehe auf **Codes** und füge Klassen hinzu (z.B. "7a" mit 25 Schülern)
-7. Klicke auf **Codes für alle Klassen generieren**
-8. Lade das **PDF herunter** und drucke es aus
-9. Optional: Generiere zusätzlich Reservecodes ohne Klasse
-10. Aktiviere die Wahl (grüner "Aktivieren"-Button)
+### Schritt 1: Anmelden
 
-### Wahl durchführen
+Im Browser **http://localhost/admin/login** aufrufen und das Passwort aus der `.env`-Datei eingeben.
 
-1. Schneide die QR-Code-Kärtchen aus (das PDF hat Schnittlinien)
-2. Verteile je ein Kärtchen pro Schüler
-3. Schüler scannen den QR-Code mit dem Handy oder geben den Code manuell ein
-4. Schüler wählen ihre Kandidaten und bestätigen
-5. Ergebnisse sind live im Admin-Bereich unter **Ergebnisse** sichtbar
-6. Nutze den **Präsentationsmodus** (Button im Dashboard), um Ergebnisse per Beamer zu zeigen
+### Schritt 2: Schuleinstellungen
+
+Ganz oben im Verwaltungsbereich den **Schulnamen** eintragen (z.B. "Realschule Bobingen"). Optional kann auch ein **Schullogo** hochgeladen werden (Bilddatei, z.B. PNG oder JPG). Beides erscheint dann auf der Startseite, der Abstimmungsseite und auf den ausgedruckten QR-Kärtchen.
+
+### Schritt 3: Wahl erstellen
+
+Unter "Neue Wahl erstellen" ausfüllen:
+
+- **Name**: z.B. "Schülersprecherwahl"
+- **Jahr**: z.B. 2026
+- **Max. Stimmen**: Wie viele Kandidaten jeder Schüler wählen darf (z.B. 3)
+
+Auf **Erstellen** klicken.
+
+### Schritt 4: Kandidaten eintragen
+
+Auf der Seite der neuen Wahl die Kandidaten hinzufügen. Für jeden Kandidaten kann man eingeben:
+
+- **Name** (Pflichtfeld)
+- **Klasse** (optional, z.B. "10a")
+- **Beschreibung** (optional, z.B. eine kurze Vorstellung)
+- **Foto** (optional, z.B. ein Portraitfoto)
+
+### Schritt 5: Klassen anlegen und Codes erzeugen
+
+Im Verwaltungsbereich auf **Codes** klicken. Dort zuerst die Klassen eintragen:
+
+1. Klassenname eingeben (z.B. "5a") und die Schülerzahl (z.B. 25)
+2. Auf **Klasse hinzufügen** klicken
+3. Diesen Vorgang für alle Klassen wiederholen
+
+Anschließend auf **Codes für alle Klassen generieren** klicken. Die App erzeugt für jede Klasse genau so viele Codes wie Schüler eingetragen sind.
+
+**Tipp:** Zusätzlich können im Bereich "Reservecodes" weitere Codes ohne Klassenzuordnung erstellt werden -- z.B. für Nachzügler oder falls ein Zettel verloren geht.
+
+### Schritt 6: PDF herunterladen und ausdrucken
+
+Nach dem Generieren erscheint der Button **PDF herunterladen**. Das PDF enthält Kärtchen mit QR-Codes und Wahlcodes zum Ausschneiden.
+
+Wichtig zu wissen:
+- Jede Klasse beginnt auf einer **neuen Seite** -- so lassen sich die Zettel leicht klassenweise verteilen
+- Die Klassen sind von der niedrigsten zur höchsten Jahrgangsstufe sortiert (5a, 5b, 6a, ... 10d)
+- Einzelne Klassen-PDFs können auch separat über den **PDF**-Link in der Klassentabelle heruntergeladen werden
+- Reservecodes haben ein eigenes PDF
+
+### Schritt 7: Wahl aktivieren
+
+Zurück auf der Seite der Wahl (Button **Bearbeiten** im Dashboard) den grünen Button **Aktivieren** klicken. Die Wahl ist jetzt aktiv und Schüler können abstimmen.
+
+Hinweis: Eine Wahl kann erst aktiviert werden, wenn mindestens Codes erzeugt wurden.
+
+---
+
+## Anleitung: Wahltag
+
+### Ablauf für die Schüler
+
+1. Jeder Schüler bekommt ein Kärtchen mit einem QR-Code
+2. QR-Code mit der Handy-Kamera scannen (oder die Adresse öffnen und den Code manuell eingeben)
+3. Kandidaten auswählen und auf **Stimme abgeben** tippen
+4. Auswahl im Bestätigungsdialog nochmals prüfen und auf **Bestätigen** tippen
+5. Fertig -- das Kärtchen kann eingesammelt werden
+
+Jeder Code funktioniert **nur einmal**. Wenn ein Code bereits verwendet wurde, erscheint eine entsprechende Meldung.
+
+### Ergebnisse verfolgen
+
+Während der Wahl können die Ergebnisse live verfolgt werden. Im Dashboard erscheinen nach der erstmaligen Aktivierung zwei neue Buttons:
+
+- **Ergebnisse**: Zeigt ein Balkendiagramm und eine Rangliste mit Wahlbeteiligung
+- **Präsentation**: Vollbild-Ansicht für den Beamer mit dunklem Hintergrund, Live-Fortschrittsbalken und einem akustischen Signal bei jeder neuen Stimme (Sound kann ausgeschaltet werden)
 
 ### Wahl beenden
 
-Wenn die Abstimmung abgeschlossen ist:
+Wenn alle Schüler abgestimmt haben:
 
-1. Gehe auf **Bearbeiten** der Wahl
-2. Klicke auf **Wahl beenden**
-3. Bestätige die Warnung (alle unbenutzten Codes werden ungültig)
-4. Die offiziellen Ergebnisse mit Wahlbeteiligung werden angezeigt
+1. Im Dashboard auf **Bearbeiten** klicken
+2. Den orangen Button **Wahl beenden** klicken
+3. Die Sicherheitsabfrage bestätigen
 
-### Tipps
+Beim Beenden passiert Folgendes:
+- Die Wahl wird deaktiviert (es kann niemand mehr abstimmen)
+- Alle noch nicht verwendeten Codes werden automatisch ungültig gemacht
+- Die Ergebnisseite zeigt ab jetzt "Offizielle Ergebnisse" an
 
-- Die Codes im PDF sind nach Klassen sortiert mit Seitenumbruch pro Klasse, so lassen sie sich einfach verteilen
-- Einzelne Klassen-PDFs können direkt in der Klassentabelle heruntergeladen werden
-- Reservecodes (ohne Klasse) haben ein eigenes PDF
-- Jeder Code funktioniert nur einmal
-- Im Admin-Bereich siehst du, welche Codes bereits verwendet wurden
-- Die Buttons "Ergebnisse" und "Präsentation" erscheinen im Dashboard erst, nachdem die Wahl erstmalig aktiviert wurde
+Dieser Vorgang kann **nicht rückgängig** gemacht werden.
 
-## App stoppen
+---
+
+## App stoppen und wieder starten
+
+### Stoppen
 
 ```
 docker compose down
 ```
 
-Die Daten (Wahlen, Stimmen, Codes) bleiben erhalten und sind beim nächsten Start wieder da.
+### Wieder starten
 
-## Auf einem Server betreiben
+```
+docker compose up -d
+```
 
-Wenn du die App nicht nur lokal, sondern im Schulnetzwerk oder im Internet betreiben willst:
+Alle Daten (Wahlen, Stimmen, Kandidaten, Codes) bleiben erhalten. Sie werden erst gelöscht, wenn man eine Wahl im Verwaltungsbereich manuell löscht.
 
-1. Installiere Docker auf dem Server
-2. Kopiere den Projektordner auf den Server
-3. Passe in der `.env`-Datei die `BASE_URL` an deine Domain an (z.B. `https://wahl.meine-schule.de`)
-4. Passe in `nginx/nginx.conf` den `server_name` an deine Domain an
-5. Starte die App mit `docker compose up -d`
-6. Für HTTPS mit eigenem Zertifikat (Let's Encrypt) einmalig ausführen:
+---
+
+## Betrieb auf einem Server (z.B. für das ganze Schulnetzwerk)
+
+Wenn die App nicht nur auf einem einzelnen Rechner, sondern schulweit über das Netzwerk oder Internet erreichbar sein soll:
+
+1. Einen Server mieten (z.B. Hetzner CX22 oder CX23, ab ca. 4 Euro/Monat) und Docker dort installieren
+2. Den Projektordner auf den Server kopieren
+3. In der `.env`-Datei die `BASE_URL` anpassen (z.B. `https://wahl.meine-schule.de`)
+4. In der Datei `nginx/nginx.conf` den `server_name` auf die eigene Domain ändern (an beiden Stellen, wo `wahl.example.de` steht)
+5. Die App starten: `docker compose up -d`
+6. Für eine verschlüsselte Verbindung (HTTPS) einmalig ausführen:
    ```
    docker compose run --rm certbot certonly --webroot -w /var/www/certbot -d wahl.meine-schule.de
    ```
-   Danach nginx neu starten: `docker compose restart nginx`
+   Danach: `docker compose restart nginx`
 
-## Ohne Docker starten (für Entwickler)
+---
+
+## Häufige Fragen
+
+**Können Schüler mehrfach abstimmen?**
+Nein. Jeder Code kann nur einmal verwendet werden. Es ist nicht möglich, denselben Code zweimal einzusetzen.
+
+**Kann man sehen, wer wen gewählt hat?**
+Nein. Die Stimmabgabe ist anonym. Technisch wird keine Verbindung zwischen dem Code und der abgegebenen Stimme gespeichert.
+
+**Was passiert, wenn ein Schüler seinen Zettel verliert?**
+Dafür gibt es die Reservecodes. Im Verwaltungsbereich unter "Codes" können jederzeit zusätzliche Codes ohne Klassenzuordnung erzeugt werden.
+
+**Kann man die Wahl nach dem Beenden wieder öffnen?**
+Nein. Sobald eine Wahl beendet wurde, ist das endgültig. Bei Bedarf kann eine neue Wahl angelegt werden.
+
+**Wie viele Schüler kann die App gleichzeitig bedienen?**
+Auf einem kleinen Server (z.B. Hetzner CX23) problemlos mehrere hundert gleichzeitige Nutzer.
+
+**Brauchen die Schüler eine App?**
+Nein. Die Abstimmung funktioniert komplett im Browser -- auf jedem Smartphone, Tablet oder Computer.
+
+---
+
+## Für Entwickler
+
+Die App ohne Docker direkt starten:
 
 ```
 python3 -m venv .venv
@@ -144,4 +259,6 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Die App läuft dann auf **http://localhost:5000**.
+Die App läuft dann auf **http://localhost:5050** (Entwicklungsmodus).
+
+Verwendete Technologien: Python, Flask, SQLite, Tailwind CSS, Chart.js, ReportLab (PDF), qrcode (QR-Codes).

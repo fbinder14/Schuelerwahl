@@ -25,6 +25,8 @@ from flask import (
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -38,6 +40,20 @@ app.config.from_object(Config)
 
 db.init_app(app)
 csrf = CSRFProtect(app)
+
+# Register Menlo font (monospace, macOS system font); fallback to Courier
+_CODE_FONT = "Courier"
+for _menlo_path in [
+    "/System/Library/Fonts/Menlo.ttc",
+    "/Library/Fonts/Menlo.ttc",
+]:
+    if os.path.exists(_menlo_path):
+        try:
+            pdfmetrics.registerFont(TTFont("Menlo", _menlo_path, subfontIndex=0))
+            _CODE_FONT = "Menlo"
+        except Exception:
+            pass
+        break
 
 # Store hashed admin password
 _admin_pw_hash = generate_password_hash(app.config["ADMIN_PASSWORD"], method="pbkdf2:sha256")
@@ -242,7 +258,39 @@ def admin_logout():
 @admin_required
 def admin_dashboard():
     elections = Election.query.order_by(Election.year.desc(), Election.id.desc()).all()
-    return render_template("admin/dashboard.html", elections=elections)
+
+    # Compute per-election stats for the dashboard status display
+    election_stats = {}
+    for e in elections:
+        total = VotingCode.query.filter_by(election_id=e.id).count()
+        used = VotingCode.query.filter(
+            VotingCode.election_id == e.id,
+            VotingCode.is_used == True,
+            VotingCode.used_at != None,
+        ).count()
+        pct = round(used / total * 100) if total > 0 else 0
+
+        # Top candidate by votes
+        candidates = Candidate.query.filter_by(election_id=e.id).all()
+        top = None
+        if candidates:
+            ranked = sorted(
+                candidates,
+                key=lambda c: Vote.query.filter_by(election_id=e.id, candidate_id=c.id).count(),
+                reverse=True,
+            )
+            top_votes = Vote.query.filter_by(election_id=e.id, candidate_id=ranked[0].id).count()
+            if top_votes > 0:
+                top = {"name": ranked[0].name, "votes": top_votes}
+
+        election_stats[e.id] = {
+            "total_codes": total,
+            "used_codes": used,
+            "pct": pct,
+            "top": top,
+        }
+
+    return render_template("admin/dashboard.html", elections=elections, election_stats=election_stats)
 
 
 @app.route("/admin/school-settings", methods=["POST"])
@@ -332,6 +380,8 @@ def admin_election_toggle(election_id: int):
         Election.query.update({"is_active": False})
         election.is_active = True
         election.was_activated = True
+        if not election.activated_at:
+            election.activated_at = datetime.now()
     else:
         election.is_active = False
 
@@ -353,6 +403,7 @@ def admin_election_end(election_id: int):
     # Deactivate and mark as ended
     election.is_active = False
     election.is_ended = True
+    election.ended_at = datetime.now()
 
     # Invalidate all unused codes
     unused_codes = VotingCode.query.filter_by(
@@ -507,7 +558,7 @@ def admin_codes_generate_classes(election_id: int):
 def admin_codes(election_id: int):
     election = Election.query.get_or_404(election_id)
     codes = VotingCode.query.filter_by(election_id=election_id).order_by(VotingCode.id).all()
-    used = sum(1 for c in codes if c.is_used)
+    used = sum(1 for c in codes if c.is_used and c.used_at is not None)
     school_classes = SchoolClass.query.filter_by(election_id=election_id).all()
     school_classes.sort(key=lambda sc: class_sort_key(sc.name))
 
@@ -654,11 +705,11 @@ def admin_codes_pdf(election_id: int):
             qr_y = y + text_area_h
             c.drawImage(qr_img, qr_x, qr_y, width=qr_size, height=qr_size)
 
-            # Text below QR code (Courier for clear 0/O distinction)
+            # Text below QR code (Menlo/Courier for clear 0/O distinction)
             c.setFillColorRGB(0, 0, 0)
             text_x = x + cell_w / 2
 
-            c.setFont("Courier", 10)
+            c.setFont(_CODE_FONT, 10)
             c.drawCentredString(text_x, y + 14 * mm, f"Code: {vc.code}")
 
             # Class name (if present)
@@ -717,7 +768,12 @@ def api_results(election_id: int):
     results.sort(key=lambda r: r["votes"], reverse=True)
 
     total_codes = VotingCode.query.filter_by(election_id=election_id).count()
-    used_codes = VotingCode.query.filter_by(election_id=election_id, is_used=True).count()
+    # Only count codes actually used for voting (used_at set); invalidated codes have used_at=None
+    used_codes = VotingCode.query.filter(
+        VotingCode.election_id == election_id,
+        VotingCode.is_used == True,
+        VotingCode.used_at != None,
+    ).count()
 
     return jsonify({
         "results": results,
@@ -725,6 +781,202 @@ def api_results(election_id: int):
         "used_codes": used_codes,
         "max_votes": election.max_votes,
     })
+
+
+@app.route("/admin/election/<int:election_id>/summary-pdf")
+@admin_required
+def admin_summary_pdf(election_id: int):
+    election = Election.query.get_or_404(election_id)
+    settings = get_school_settings()
+
+    if not election.is_ended:
+        flash("Die Zusammenfassung ist erst nach Beendigung der Wahl verfügbar.", "error")
+        return redirect(url_for("admin_results", election_id=election_id))
+
+    # Gather data
+    candidates = Candidate.query.filter_by(election_id=election_id).all()
+    results = []
+    for cand in candidates:
+        count = Vote.query.filter_by(election_id=election_id, candidate_id=cand.id).count()
+        results.append({"name": cand.name, "class_name": cand.class_name, "votes": count})
+    results.sort(key=lambda r: r["votes"], reverse=True)
+
+    total_codes = VotingCode.query.filter_by(election_id=election_id).count()
+    used_codes = VotingCode.query.filter(
+        VotingCode.election_id == election_id,
+        VotingCode.is_used == True,
+        VotingCode.used_at != None,
+    ).count()
+    total_votes = Vote.query.filter_by(election_id=election_id).count()
+    pct = round(used_codes / total_codes * 100, 1) if total_codes > 0 else 0
+
+    # Time period
+    fmt = "%d.%m.%Y um %H:%M:%S Uhr"
+    started = election.activated_at.strftime(fmt) if election.activated_at else "Unbekannt"
+    ended = election.ended_at.strftime(fmt) if election.ended_at else "Unbekannt"
+
+    # Register Arial font (fallback to Helvetica if not available)
+    font_name = "Helvetica"
+    font_name_bold = "Helvetica-Bold"
+    for arial_path in [
+        "/Library/Fonts/Arial.ttf",                    # macOS
+        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",  # Linux (ttf-mscorefonts)
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",  # Linux fallback
+    ]:
+        if os.path.exists(arial_path):
+            try:
+                pdfmetrics.registerFont(TTFont("Arial", arial_path))
+                font_name = "Arial"
+                # Try bold variant
+                bold_path = arial_path.replace(".ttf", " Bold.ttf").replace("Regular", "Bold")
+                if os.path.exists(bold_path):
+                    pdfmetrics.registerFont(TTFont("Arial-Bold", bold_path))
+                    font_name_bold = "Arial-Bold"
+                else:
+                    font_name_bold = font_name
+            except Exception:
+                pass
+            break
+
+    buf = io.BytesIO()
+    pdf_title = f"Zusammenfassung {election.name} {election.year}"
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.setTitle(pdf_title)
+    c.setAuthor(settings.school_name or "")
+    page_w, page_h = A4
+    margin = 25 * mm
+    content_w = page_w - 2 * margin
+    y = page_h - margin
+
+    # --- Logo ---
+    if settings.logo_filename:
+        logo_path = os.path.join(app.config["UPLOAD_FOLDER"], settings.logo_filename)
+        if os.path.exists(logo_path):
+            from reportlab.lib.utils import ImageReader
+
+            try:
+                logo = ImageReader(logo_path)
+                iw, ih = logo.getSize()
+                logo_h = 18 * mm
+                logo_w = logo_h * (iw / ih)
+                c.drawImage(logo, margin, y - logo_h, width=logo_w, height=logo_h,
+                            preserveAspectRatio=True, mask="auto")
+                y -= logo_h + 6 * mm
+            except Exception:
+                pass
+
+    # --- Title ---
+    c.setFont(font_name_bold, 18)
+    c.drawString(margin, y, election.name)
+    y -= 8 * mm
+
+    if settings.school_name:
+        c.setFont(font_name, 12)
+        c.setFillColorRGB(0.3, 0.3, 0.3)
+        c.drawString(margin, y, settings.school_name)
+        y -= 7 * mm
+
+    c.setFillColorRGB(0, 0, 0)
+
+    # --- Divider ---
+    y -= 3 * mm
+    c.setStrokeColorRGB(0.8, 0.8, 0.8)
+    c.setLineWidth(0.5)
+    c.line(margin, y, page_w - margin, y)
+    y -= 10 * mm
+
+    # --- Election info ---
+    c.setFont(font_name_bold, 14)
+    c.drawString(margin, y, "Wahlzeitraum")
+    y -= 7 * mm
+
+    c.setFont(font_name, 12)
+    c.drawString(margin, y, f"Beginn:  {started}")
+    y -= 6 * mm
+    c.drawString(margin, y, f"Ende:    {ended}")
+    y -= 10 * mm
+
+    # --- Participation ---
+    c.setFont(font_name_bold, 14)
+    c.drawString(margin, y, "Wahlbeteiligung")
+    y -= 7 * mm
+
+    c.setFont(font_name, 12)
+    c.drawString(margin, y, f"Wahlcodes gesamt:    {total_codes}")
+    y -= 6 * mm
+    c.drawString(margin, y, f"Codes verwendet:     {used_codes}")
+    y -= 6 * mm
+    c.drawString(margin, y, f"Wahlbeteiligung:     {pct} %")
+    y -= 6 * mm
+    c.drawString(margin, y, f"Abgegebene Stimmen:  {total_votes}  (max. {election.max_votes} pro Wähler)")
+    y -= 12 * mm
+
+    # --- Results table ---
+    c.setFont(font_name_bold, 14)
+    c.drawString(margin, y, "Ergebnisse")
+    y -= 10 * mm
+
+    # Table header
+    col_rank = margin
+    col_name = margin + 12 * mm
+    col_class = margin + content_w * 0.6
+    col_votes = margin + content_w * 0.8
+
+    c.setFont(font_name_bold, 12)
+    c.drawString(col_rank, y, "Platz")
+    c.drawString(col_name, y, "Name")
+    c.drawString(col_class, y, "Klasse")
+    c.drawRightString(page_w - margin, y, "Stimmen")
+    y -= 2 * mm
+
+    c.setStrokeColorRGB(0.7, 0.7, 0.7)
+    c.setLineWidth(0.5)
+    c.line(margin, y, page_w - margin, y)
+    y -= 6 * mm
+
+    # Table rows
+    c.setFont(font_name, 12)
+    for i, r in enumerate(results):
+        if y < margin + 20 * mm:
+            c.showPage()
+            y = page_h - margin
+            c.setFont(font_name, 12)
+
+        rank = str(i + 1) + "."
+
+        # Highlight top 3
+        if i < 3:
+            c.setFont(font_name_bold, 12)
+        else:
+            c.setFont(font_name, 12)
+
+        c.drawString(col_rank, y, rank)
+        c.drawString(col_name, y, r["name"])
+        c.setFont(font_name, 12)
+        c.drawString(col_class, y, r["class_name"] or "-")
+        c.drawRightString(page_w - margin, y, str(r["votes"]))
+        y -= 7 * mm
+
+    # --- Footer ---
+    y -= 5 * mm
+    c.setStrokeColorRGB(0.8, 0.8, 0.8)
+    c.line(margin, y, page_w - margin, y)
+    y -= 8 * mm
+
+    c.setFont(font_name, 9)
+    c.setFillColorRGB(0.5, 0.5, 0.5)
+    now_str = datetime.now().strftime("%d.%m.%Y, %H:%M Uhr")
+    c.drawString(margin, y, f"Erstellt am {now_str}")
+
+    c.save()
+    buf.seek(0)
+
+    return send_file(
+        buf,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"Zusammenfassung_{election.name}_{election.year}.pdf",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -740,4 +992,4 @@ with app.app_context():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5050)

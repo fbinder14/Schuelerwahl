@@ -4,7 +4,16 @@
 {% block content %}
 <div class="max-w-2xl mx-auto px-4 py-8">
     <div class="text-center mb-8">
+        {% if school_settings.logo_filename %}
+        <div class="mb-3 flex justify-center">
+            <img src="{{ url_for('static', filename='uploads/' + school_settings.logo_filename) }}"
+                alt="Schullogo" class="h-12 object-contain">
+        </div>
+        {% endif %}
         <h1 class="text-2xl font-bold text-gray-800">{{ election.name }}</h1>
+        {% if school_settings.school_name %}
+        <p class="text-sm text-blue-600 font-medium">{{ school_settings.school_name }}</p>
+        {% endif %}
         <p class="text-gray-500 mt-1">Wähle bis zu <strong>{{ election.max_votes }}</strong> Kandidaten</p>
     </div>
 

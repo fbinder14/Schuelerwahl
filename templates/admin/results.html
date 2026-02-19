@@ -5,7 +5,15 @@
 <div class="max-w-4xl mx-auto px-4 py-8">
     <div class="mb-6">
         <a href="{{ url_for('admin_dashboard') }}" class="text-sm text-blue-600 hover:underline">&larr; Zurück</a>
-        <h1 class="text-2xl font-bold text-gray-800 mt-1">Ergebnisse: {{ election.name }}</h1>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="text-2xl font-bold text-gray-800">Ergebnisse: {{ election.name }}</h1>
+            <a href="{{ url_for('admin_present', election_id=election.id) }}"
+                class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition"
+                title="Präsentationsmodus">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Präsentation
+            </a>
+        </div>
     </div>
 
     <!-- Wahlbeteiligung -->

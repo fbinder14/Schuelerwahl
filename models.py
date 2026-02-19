@@ -5,12 +5,19 @@ from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
 
+class SchoolSettings(db.Model):
+    __tablename__ = "school_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    school_name = db.Column(db.String(200), default="")
+    logo_filename = db.Column(db.String(200))
+
+
 class Election(db.Model):
     __tablename__ = "elections"
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
-    school_name = db.Column(db.String(200), default="")
     year = db.Column(db.Integer, nullable=False)
     max_votes = db.Column(db.Integer, default=3)
     is_active = db.Column(db.Boolean, default=False)

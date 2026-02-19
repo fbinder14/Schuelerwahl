@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ election.name }} - Live</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        body { background: #0f172a; overflow: hidden; }
+
+        @keyframes bar-highlight {
+            0% { filter: brightness(1); }
+            25% { filter: brightness(1.8); }
+            100% { filter: brightness(1); }
+        }
+        .bar-flash {
+            animation: bar-highlight 1.2s ease-out;
+        }
+
+        @keyframes progress-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .progress-bar-inner {
+            transition: width 0.8s ease-in-out;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col text-white select-none">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-8 py-4 bg-slate-800/50 border-b border-slate-700/50">
+        <div class="flex items-center gap-4">
+            {% if school_settings.logo_filename %}
+            <img src="{{ url_for('static', filename='uploads/' + school_settings.logo_filename) }}"
+                alt="Logo" class="h-10 object-contain brightness-0 invert opacity-80">
+            {% endif %}
+            <div>
+                <h1 class="text-xl font-bold text-white">{{ election.name }}</h1>
+                {% if school_settings.school_name %}
+                <p class="text-sm text-slate-400">{{ school_settings.school_name }}</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button id="soundToggle" onclick="toggleSound()" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-sm flex items-center gap-2" title="Sound an/aus">
+                <svg id="soundOn" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.5 8H4a1 1 0 00-1 1v6a1 1 0 001 1h2.5l4.5 4V4l-4.5 4z"/></svg>
+                <svg id="soundOff" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1V10a1 1 0 011-1h1.586l4.707-4.707A1 1 0 0112 5v14a1 1 0 01-1.707.707L5.586 15z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/></svg>
+                <span id="soundLabel">Sound an</span>
+            </button>
+            <a href="{{ url_for('admin_results', election_id=election.id) }}"
+                class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-sm">
+                Beenden
+            </a>
+        </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="px-8 pt-5 pb-2">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-slate-400">Wahlbeteiligung</span>
+            <span class="text-sm font-bold text-white"><span id="pctText">0</span> % &mdash; <span id="usedText">0</span> / <span id="totalText">0</span> Stimmen</span>
+        </div>
+        <div class="w-full h-4 bg-slate-700 rounded-full overflow-hidden">
+            <div id="progressBar" class="progress-bar-inner h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <!-- Chart area -->
+    <div class="flex-1 px-8 py-4 min-h-0">
+        <canvas id="chart"></canvas>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-8 py-3 text-center text-xs text-slate-500 border-t border-slate-700/50">
+        Live-Ergebnisse &mdash; aktualisiert sich alle 3 Sekunden
+    </div>
+
+<script>
+(function() {
+    const electionId = {{ election.id }};
+    let chart = null;
+    let prevVotes = {};
+    let soundEnabled = true;
+    let audioCtx = null;
+
+    function getAudioCtx() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return audioCtx;
+    }
+
+    function playVoteSound() {
+        if (!soundEnabled) return;
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.4);
+        } catch(e) {}
+    }
+
+    window.toggleSound = function() {
+        soundEnabled = !soundEnabled;
+        document.getElementById('soundOn').classList.toggle('hidden', !soundEnabled);
+        document.getElementById('soundOff').classList.toggle('hidden', soundEnabled);
+        document.getElementById('soundLabel').textContent = soundEnabled ? 'Sound an' : 'Sound aus';
+        // Initialize AudioContext on user interaction
+        if (soundEnabled) getAudioCtx();
+    };
+
+    function fetchResults() {
+        fetch('/api/election/' + electionId + '/results')
+            .then(r => r.json())
+            .then(data => {
+                updateProgress(data);
+                updateChart(data);
+            });
+    }
+
+    function updateProgress(data) {
+        const pct = data.total_codes > 0 ? Math.round(data.used_codes / data.total_codes * 100) : 0;
+        document.getElementById('pctText').textContent = pct;
+        document.getElementById('usedText').textContent = data.used_codes;
+        document.getElementById('totalText').textContent = data.total_codes;
+        document.getElementById('progressBar').style.width = pct + '%';
+    }
+
+    function updateChart(data) {
+        const labels = data.results.map(r => r.name + (r.class_name ? ' (' + r.class_name + ')' : ''));
+        const votes = data.results.map(r => r.votes);
+        const maxVote = Math.max(...votes, 1);
+
+        // Detect which candidates got new votes
+        const changedIndices = [];
+        data.results.forEach((r, i) => {
+            const key = r.name;
+            if (prevVotes[key] !== undefined && r.votes > prevVotes[key]) {
+                changedIndices.push(i);
+            }
+            prevVotes[key] = r.votes;
+        });
+
+        // Colors: top 3 get highlight colors, rest are neutral
+        const colors = data.results.map((_, i) => {
+            if (i === 0) return '#3b82f6';
+            if (i === 1) return '#60a5fa';
+            if (i === 2) return '#93c5fd';
+            return '#475569';
+        });
+
+        if (chart) {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = votes;
+            chart.data.datasets[0].backgroundColor = colors;
+            chart.options.scales.x.max = Math.max(maxVote + 2, 5);
+            chart.update('none');
+
+            // Flash changed bars
+            if (changedIndices.length > 0) {
+                playVoteSound();
+                const bars = chart.getDatasetMeta(0).data;
+                changedIndices.forEach(idx => {
+                    if (bars[idx] && bars[idx].$context) {
+                        const el = bars[idx].getProps(['x', 'y', 'width', 'height']);
+                    }
+                });
+                // CSS flash via overlay
+                changedIndices.forEach(idx => {
+                    flashBar(idx);
+                });
+            }
+        } else {
+            const ctx = document.getElementById('chart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Stimmen',
+                        data: votes,
+                        backgroundColor: colors,
+                        borderRadius: 8,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 600, easing: 'easeOutQuart' },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false },
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            max: Math.max(maxVote + 2, 5),
+                            ticks: {
+                                stepSize: 1,
+                                color: '#94a3b8',
+                                font: { size: 14 }
+                            },
+                            grid: { color: 'rgba(148,163,184,0.1)' }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#e2e8f0',
+                                font: { size: 16, weight: 'bold' },
+                                padding: 8
+                            },
+                            grid: { display: false }
+                        }
+                    },
+                    layout: { padding: { right: 20 } }
+                },
+                plugins: [{
+                    id: 'voteLabels',
+                    afterDatasetsDraw(chart) {
+                        const ctx = chart.ctx;
+                        chart.getDatasetMeta(0).data.forEach((bar, i) => {
+                            const val = chart.data.datasets[0].data[i];
+                            ctx.save();
+                            ctx.fillStyle = '#f1f5f9';
+                            ctx.font = 'bold 16px sans-serif';
+                            ctx.textAlign = 'left';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(val, bar.x + 8, bar.y);
+                            ctx.restore();
+                        });
+                    }
+                }]
+            });
+        }
+    }
+
+    function flashBar(index) {
+        const canvas = document.getElementById('chart');
+        const bar = chart.getDatasetMeta(0).data[index];
+        if (!bar) return;
+
+        // Create a temporary overlay div for the flash
+        const rect = canvas.getBoundingClientRect();
+        const flash = document.createElement('div');
+        flash.style.position = 'fixed';
+        flash.style.left = (rect.left + bar.x - bar.width) + 'px';
+        flash.style.top = (rect.top + bar.y - bar.height / 2) + 'px';
+        flash.style.width = bar.width + 'px';
+        flash.style.height = bar.height + 'px';
+        flash.style.background = 'rgba(255,255,255,0.4)';
+        flash.style.borderRadius = '8px';
+        flash.style.pointerEvents = 'none';
+        flash.style.transition = 'opacity 1s ease-out';
+        flash.style.zIndex = '50';
+        document.body.appendChild(flash);
+
+        requestAnimationFrame(() => {
+            flash.style.opacity = '0';
+            setTimeout(() => flash.remove(), 1000);
+        });
+    }
+
+    fetchResults();
+    setInterval(fetchResults, 3000);
+})();
+</script>
+</body>
+</html>

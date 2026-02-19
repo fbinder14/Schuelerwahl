@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import secrets
 import string
 import time
@@ -30,7 +31,7 @@ from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 
 from config import Config
-from models import Candidate, Election, SchoolClass, Vote, VotingCode, db
+from models import Candidate, Election, SchoolClass, SchoolSettings, Vote, VotingCode, db
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -83,11 +84,26 @@ def generate_code(length: int = 8) -> str:
 
 def class_sort_key(name: str) -> tuple:
     """Sort class names naturally: 5a < 5b < 6a < 10d."""
-    import re
     m = re.match(r"(\d+)(.*)", name.strip())
     if m:
         return (int(m.group(1)), m.group(2).lower())
     return (999, name.lower())
+
+
+def get_school_settings() -> SchoolSettings:
+    """Return the single SchoolSettings row, creating it if needed."""
+    settings = SchoolSettings.query.first()
+    if not settings:
+        settings = SchoolSettings(school_name="")
+        db.session.add(settings)
+        db.session.commit()
+    return settings
+
+
+@app.context_processor
+def inject_school_settings():
+    """Make school_settings available in all templates."""
+    return dict(school_settings=get_school_settings())
 
 
 # ---------------------------------------------------------------------------
@@ -96,9 +112,7 @@ def class_sort_key(name: str) -> tuple:
 
 @app.route("/")
 def index():
-    active_election = Election.query.filter_by(is_active=True).first()
-    school_name = active_election.school_name if active_election else ""
-    return render_template("index.html", school_name=school_name)
+    return render_template("index.html")
 
 
 @app.route("/enter-code", methods=["POST"])
@@ -231,11 +245,48 @@ def admin_dashboard():
     return render_template("admin/dashboard.html", elections=elections)
 
 
+@app.route("/admin/school-settings", methods=["POST"])
+@admin_required
+def admin_school_settings():
+    settings = get_school_settings()
+    settings.school_name = request.form.get("school_name", "").strip()
+
+    if "logo" in request.files:
+        logo = request.files["logo"]
+        if logo.filename and allowed_file(logo.filename):
+            # Delete old logo
+            if settings.logo_filename:
+                old_path = os.path.join(app.config["UPLOAD_FOLDER"], settings.logo_filename)
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+            filename = secure_filename(f"school_logo_{logo.filename}")
+            os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+            logo.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+            settings.logo_filename = filename
+
+    db.session.commit()
+    flash("Schuleinstellungen gespeichert.", "success")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/school-settings/delete-logo", methods=["POST"])
+@admin_required
+def admin_delete_logo():
+    settings = get_school_settings()
+    if settings.logo_filename:
+        logo_path = os.path.join(app.config["UPLOAD_FOLDER"], settings.logo_filename)
+        if os.path.exists(logo_path):
+            os.remove(logo_path)
+        settings.logo_filename = None
+        db.session.commit()
+    flash("Logo entfernt.", "success")
+    return redirect(url_for("admin_dashboard"))
+
+
 @app.route("/admin/election/new", methods=["POST"])
 @admin_required
 def admin_election_new():
     name = request.form.get("name", "").strip()
-    school_name = request.form.get("school_name", "").strip()
     year = request.form.get("year", "")
     max_votes = request.form.get("max_votes", "3")
 
@@ -245,7 +296,6 @@ def admin_election_new():
 
     election = Election(
         name=name,
-        school_name=school_name,
         year=int(year),
         max_votes=int(max_votes),
     )
@@ -373,7 +423,7 @@ def admin_class_add(election_id: int):
     db.session.add(sc)
     db.session.commit()
     flash(f"Klasse '{name}' hinzugefügt.", "success")
-    return redirect(url_for("admin_codes", election_id=election_id))
+    return redirect(url_for("admin_codes", election_id=election_id, _anchor="add-class"))
 
 
 @app.route("/admin/class/<int:class_id>/delete", methods=["POST"])
@@ -474,6 +524,7 @@ def admin_codes_generate(election_id: int):
 @admin_required
 def admin_codes_pdf(election_id: int):
     election = Election.query.get_or_404(election_id)
+    settings = get_school_settings()
 
     # Optional: filter by single class
     filter_class = request.args.get("class_name")
@@ -503,7 +554,10 @@ def admin_codes_pdf(election_id: int):
 
     base_url = app.config["BASE_URL"].rstrip("/")
     buf = io.BytesIO()
+    pdf_title = f"{election.name} {election.year}"
     c = canvas.Canvas(buf, pagesize=A4)
+    c.setTitle(pdf_title)
+    c.setAuthor(settings.school_name or "")
     page_w, page_h = A4
 
     # Layout: 2 columns x 5 rows = 10 per page
@@ -573,10 +627,10 @@ def admin_codes_pdf(election_id: int):
                 c.drawCentredString(text_x, y + 9 * mm, election.name)
 
             # School name
-            if election.school_name:
+            if settings.school_name:
                 c.setFont("Helvetica", 6)
                 c.setFillColorRGB(0.4, 0.4, 0.4)
-                c.drawCentredString(text_x, y + 4 * mm, election.school_name)
+                c.drawCentredString(text_x, y + 4 * mm, settings.school_name)
 
     c.save()
     buf.seek(0)
@@ -598,6 +652,13 @@ def admin_codes_pdf(election_id: int):
 def admin_results(election_id: int):
     election = Election.query.get_or_404(election_id)
     return render_template("admin/results.html", election=election)
+
+
+@app.route("/admin/election/<int:election_id>/present")
+@admin_required
+def admin_present(election_id: int):
+    election = Election.query.get_or_404(election_id)
+    return render_template("admin/present.html", election=election)
 
 
 @app.route("/api/election/<int:election_id>/results")
@@ -632,6 +693,8 @@ with app.app_context():
     os.makedirs(os.path.join(app.instance_path), exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     db.create_all()
+    # Ensure school settings row exists
+    get_school_settings()
 
 
 if __name__ == "__main__":

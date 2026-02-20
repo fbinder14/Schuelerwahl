@@ -128,7 +128,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-50">
                     {% for code in codes %}
-                    <tr class="{% if code.is_used %}bg-gray-50 text-gray-400 line-through{% endif %}">
+                    <tr class="{% if code.is_used %}bg-gray-50 text-gray-400{% endif %}">
                         <td class="px-4 py-2">{{ loop.index }}</td>
                         <td class="px-4 py-2 font-mono tracking-wider">{{ code.code }}</td>
                         <td class="px-4 py-2">{{ code.class_name or '-' }}</td>
